@@ -1,6 +1,6 @@
 FROM eclipse-temurin:17-jdk-focal AS builder
 
-RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libsqlite3-dev && rm -rf /var/lib/apt/lists/*
 
 ADD . /app
 WORKDIR /app
