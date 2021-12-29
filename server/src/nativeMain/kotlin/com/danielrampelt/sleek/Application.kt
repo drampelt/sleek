@@ -10,6 +10,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
 import io.ktor.server.application.install
@@ -30,6 +31,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import io.ktor.util.pipeline.PipelineContext
 import io.ktor.utils.io.close
 import io.ktor.utils.io.core.readAvailable
 import io.ktor.utils.io.core.use
@@ -51,6 +53,8 @@ fun main() {
     FileSystem.SYSTEM.createDirectory(path.toPath())
     FileSystem.SYSTEM.createDirectory(uploadsPath.toPath())
 
+    val apiKey = getenv("API_KEY")?.toKString() ?: throw IllegalStateException("You must set the API_KEY variable")
+
     val driver = NativeSqliteDriver(
         configuration = DatabaseConfiguration(
             name = "sleek.db",
@@ -68,10 +72,21 @@ fun main() {
     )
     val db = Database(driver)
 
+    class ForbiddenException(message: String? = null) : RuntimeException(message)
+    fun PipelineContext<Unit, ApplicationCall>.authorize() {
+        val authHeader = call.request.header(HttpHeaders.Authorization) ?: throw ForbiddenException()
+        val parts = authHeader.split(" ")
+        if (parts.size != 2 || parts[0] != "Bearer" || parts[1] != apiKey) throw ForbiddenException()
+    }
+
     embeddedServer(CIO, port = 8888) {
         install(StatusPages) {
             exception<NotFoundException> { call, cause ->
                 call.respondText("Not Found", status = HttpStatusCode.NotFound)
+            }
+
+            exception<ForbiddenException> { call, cause ->
+                call.respondText("Forbidden", status = HttpStatusCode.Forbidden)
             }
         }
 
@@ -90,6 +105,7 @@ fun main() {
 
         routing {
             post("/_/link") {
+                authorize()
                 val id = call.parameters["id"] ?: randomId()
                 val name = call.parameters["name"]
                 val path = call.parameters["path"]!!
@@ -99,6 +115,7 @@ fun main() {
             }
 
             post("/_/file") {
+                authorize()
                 // TODO: multipart doesn't actually work on native yet
                 val multipart = call.receiveMultipart()
                 var id: String? = call.parameters["id"] ?: randomId()
@@ -133,6 +150,7 @@ fun main() {
             }
 
             post("/_/raw") {
+                authorize()
                 val id = call.parameters["id"] ?: randomId()
                 val name = call.parameters["name"]!!
                 val type = call.request.header(HttpHeaders.ContentType) ?: "application/octet-stream"
