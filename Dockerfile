@@ -1,13 +1,11 @@
-FROM alpine:3.15 AS builder
-
-RUN apk add --no-cache openjdk17
+FROM openjdk:17 AS builder
 
 ADD . /app
 WORKDIR /app
 
 RUN ./gradlew :server:linkReleaseExecutableNative
 
-FROM alpine:3.15
+FROM debian:bullseye-slim
 
 WORKDIR /app
 
