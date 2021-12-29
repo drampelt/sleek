@@ -8,8 +8,10 @@ import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLBuilder
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
+import io.ktor.http.path
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
@@ -20,7 +22,6 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.logging.toLogString
 import io.ktor.server.plugins.NotFoundException
 import io.ktor.server.plugins.StatusPages
-import io.ktor.server.plugins.origin
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.request.receiveMultipart
@@ -31,6 +32,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import io.ktor.server.util.createFromCall
 import io.ktor.util.pipeline.PipelineContext
 import io.ktor.utils.io.close
 import io.ktor.utils.io.core.readAvailable
@@ -79,6 +81,11 @@ fun main() {
         if (parts.size != 2 || parts[0] != "Bearer" || parts[1] != apiKey) throw ForbiddenException()
     }
 
+    fun ApplicationCall.baseUrl(): URLBuilder = URLBuilder.createFromCall(this).apply {
+        pathSegments = emptyList()
+        parameters.clear()
+    }
+
     embeddedServer(CIO, port = 8888) {
         install(StatusPages) {
             exception<NotFoundException> { call, cause ->
@@ -111,7 +118,8 @@ fun main() {
                 val path = call.parameters["path"]!!
                 require(path.startsWith("http://") || path.startsWith("https://"))
                 db.resourceQueries.insert(id, "text/uri-list", name, path)
-                call.respondText("OK")
+                val url = call.baseUrl().apply { path(id) }.buildString()
+                call.respondText(url)
             }
 
             post("/_/file") {
@@ -164,7 +172,8 @@ fun main() {
                     }
                 }
                 db.resourceQueries.insert(id, type, name, id)
-                call.respondText("${call.request.origin.remoteHost}/$id")
+                val url = call.baseUrl().apply { path(id) }.buildString()
+                call.respondText(url)
             }
 
             get("{id...}") {
