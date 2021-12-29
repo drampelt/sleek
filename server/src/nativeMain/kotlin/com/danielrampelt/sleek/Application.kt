@@ -34,6 +34,8 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.use
+import kotlin.native.concurrent.SharedImmutable
+import kotlin.random.Random
 
 fun main() {
     val driver = NativeSqliteDriver(
@@ -62,7 +64,7 @@ fun main() {
 
         routing {
             post("/_/link") {
-                val id = call.parameters["id"]!!
+                val id = call.parameters["id"] ?: randomId()
                 val name = call.parameters["name"]
                 val path = call.parameters["path"]!!
                 require(path.startsWith("http://") || path.startsWith("https://"))
@@ -73,7 +75,7 @@ fun main() {
             post("/_/file") {
                 // TODO: multipart doesn't actually work on native yet
                 val multipart = call.receiveMultipart()
-                var id: String? = call.parameters["id"]
+                var id: String? = call.parameters["id"] ?: randomId()
                 var name: String? = call.parameters["name"]
                 var type = "application/octet-stream"
                 multipart.forEachPart { part ->
@@ -105,7 +107,7 @@ fun main() {
             }
 
             post("/_/raw") {
-                val id = call.parameters["id"]!!
+                val id = call.parameters["id"] ?: randomId()
                 val name = call.parameters["name"]!!
                 val type = call.request.header(HttpHeaders.ContentType) ?: "application/octet-stream"
                 val channel = call.receiveChannel()
@@ -152,4 +154,13 @@ fun main() {
             }
         }
     }.start(wait = true)
+}
+
+@SharedImmutable
+private val Alphabet = ('a'..'z') + ('A'..'Z') + ('0'..'9')
+
+private fun randomId(length: Int = 6): String {
+    return (1..length)
+        .map { Alphabet[Random.nextInt(Alphabet.size)] }
+        .joinToString("")
 }
