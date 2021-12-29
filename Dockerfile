@@ -2,7 +2,7 @@ FROM alpine:3.15 AS builder
 
 RUN apk add --no-cache openjdk17
 
-ADD server /app
+ADD . /app
 WORKDIR /app
 
 RUN ./gradlew :server:linkReleaseExecutableNative
