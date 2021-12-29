@@ -1,6 +1,7 @@
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
+    id("com.squareup.sqldelight")
 }
 
 repositories {
@@ -27,7 +28,7 @@ kotlin {
     }
 
     sourceSets {
-        named("commonMain") {
+        named("nativeMain") {
             dependencies {
                 implementation(libs.ktor.server.core)
                 implementation(libs.ktor.server.cio)
@@ -40,7 +41,15 @@ kotlin {
 //                implementation(libs.ktor.server.callLogging)
 //                implementation(libs.ktor.server.auth)
 //                implementation(libs.ktor.serialization.kotlinxJson)
+                implementation(libs.sqldelight.native)
+                implementation(libs.okio)
             }
         }
+    }
+}
+
+sqldelight {
+    database("Database") {
+        packageName = "com.danielrampelt.sleek.database"
     }
 }

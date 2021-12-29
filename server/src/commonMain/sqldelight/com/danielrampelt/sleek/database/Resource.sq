@@ -1,0 +1,16 @@
+CREATE TABLE resource (
+    id TEXT NOT NULL PRIMARY KEY,
+    type TEXT NOT NULL,
+    name TEXT,
+    path TEXT NOT NULL
+) WITHOUT ROWID;
+
+insert:
+INSERT INTO resource (id, type, name, path) VALUES (?, ?, ?, ?);
+
+selectAll:
+SELECT * FROM resource;
+
+findById:
+SELECT * FROM resource
+WHERE id = ?;
