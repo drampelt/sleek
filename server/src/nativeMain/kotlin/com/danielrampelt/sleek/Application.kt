@@ -33,10 +33,12 @@ import io.ktor.server.routing.routing
 import io.ktor.utils.io.close
 import io.ktor.utils.io.core.readAvailable
 import io.ktor.utils.io.core.use
+import kotlinx.cinterop.toKString
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.use
+import platform.posix.getenv
 import kotlin.native.concurrent.SharedImmutable
 import kotlin.random.Random
 import kotlin.time.ExperimentalTime
@@ -44,6 +46,11 @@ import kotlin.time.TimeSource
 
 @OptIn(ExperimentalTime::class)
 fun main() {
+    val path = getenv("STORAGE_PATH")?.toKString() ?: "."
+    val uploadsPath = getenv("UPLOADS_PATH")?.toKString() ?: "$path/uploads"
+    FileSystem.SYSTEM.createDirectory(path.toPath())
+    FileSystem.SYSTEM.createDirectory(uploadsPath.toPath())
+
     val driver = NativeSqliteDriver(
         configuration = DatabaseConfiguration(
             name = "sleek.db",
@@ -55,7 +62,7 @@ fun main() {
                 wrapConnection(connection) { Database.Schema.migrate(it, oldVersion, newVersion) }
             },
             extendedConfig = DatabaseConfiguration.Extended(
-                basePath = ".",
+                basePath = path,
             ),
         )
     )
@@ -109,7 +116,7 @@ fun main() {
                             if (name == null) name = part.originalFileName ?: "file"
                             part.contentType?.let { type = it.toString() }
 
-                            FileSystem.SYSTEM.sink("uploads/$id".toPath(), mustCreate = true).buffer().use { output ->
+                            FileSystem.SYSTEM.sink("$uploadsPath/$id".toPath(), mustCreate = true).buffer().use { output ->
                                 part.provider().use { input ->
                                     val buffer = ByteArray(4096)
                                     var read = input.readAvailable(buffer, buffer.size)
@@ -130,7 +137,7 @@ fun main() {
                 val name = call.parameters["name"]!!
                 val type = call.request.header(HttpHeaders.ContentType) ?: "application/octet-stream"
                 val channel = call.receiveChannel()
-                FileSystem.SYSTEM.sink("uploads/$id".toPath(), mustCreate = true).buffer().use { output ->
+                FileSystem.SYSTEM.sink("$uploadsPath/$id".toPath(), mustCreate = true).buffer().use { output ->
                     val buffer = ByteArray(4096)
                     var read = channel.readAvailable(buffer, 0, buffer.size)
                     while (read > 0) {
@@ -151,7 +158,7 @@ fun main() {
                     return@get
                 }
 
-                val handle = FileSystem.SYSTEM.openReadOnly("uploads/$id".toPath())
+                val handle = FileSystem.SYSTEM.openReadOnly("$uploadsPath/$id".toPath())
                 call.response.header(
                     HttpHeaders.ContentDisposition,
                     ContentDisposition.Inline
