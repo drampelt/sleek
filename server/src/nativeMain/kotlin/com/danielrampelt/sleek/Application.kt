@@ -10,10 +10,13 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
+import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
 import io.ktor.server.application.install
+import io.ktor.server.application.log
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
+import io.ktor.server.logging.toLogString
 import io.ktor.server.plugins.NotFoundException
 import io.ktor.server.plugins.StatusPages
 import io.ktor.server.plugins.origin
@@ -36,7 +39,10 @@ import okio.buffer
 import okio.use
 import kotlin.native.concurrent.SharedImmutable
 import kotlin.random.Random
+import kotlin.time.ExperimentalTime
+import kotlin.time.TimeSource
 
+@OptIn(ExperimentalTime::class)
 fun main() {
     val driver = NativeSqliteDriver(
         configuration = DatabaseConfiguration(
@@ -60,6 +66,19 @@ fun main() {
             exception<NotFoundException> { call, cause ->
                 call.respondText("Not Found", status = HttpStatusCode.NotFound)
             }
+        }
+
+        // Temporary logging until it is supported in native
+        intercept(ApplicationCallPipeline.Setup) {
+            val time = TimeSource.Monotonic.markNow()
+            proceed()
+            val duration = time.elapsedNow()
+            val message = when (val status = call.response.status() ?: "Unhandled") {
+                HttpStatusCode.Found -> "${status as HttpStatusCode}: ${call.request.toLogString()} -> ${call.response.headers[HttpHeaders.Location]} in $duration"
+                "Unhandled" -> "$status: ${call.request.toLogString()} in $duration"
+                else -> "${status as HttpStatusCode}: ${call.request.toLogString()} in $duration"
+            }
+            log.info(message)
         }
 
         routing {
