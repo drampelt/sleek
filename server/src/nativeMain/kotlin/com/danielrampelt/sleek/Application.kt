@@ -18,6 +18,7 @@ import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.application.log
 import io.ktor.server.cio.CIO
+import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.logging.toLogString
 import io.ktor.server.plugins.NotFoundException
@@ -37,16 +38,24 @@ import io.ktor.util.pipeline.PipelineContext
 import io.ktor.utils.io.close
 import io.ktor.utils.io.core.readAvailable
 import io.ktor.utils.io.core.use
+import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toKString
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.use
+import platform.posix.SIGINT
+import platform.posix.exit
 import platform.posix.getenv
+import platform.posix.signal
+import kotlin.native.concurrent.AtomicReference
 import kotlin.native.concurrent.SharedImmutable
 import kotlin.random.Random
 import kotlin.time.ExperimentalTime
 import kotlin.time.TimeSource
+
+@SharedImmutable
+private val engineRef = AtomicReference<ApplicationEngine?>(null)
 
 @OptIn(ExperimentalTime::class)
 fun main() {
@@ -86,7 +95,7 @@ fun main() {
         parameters.clear()
     }
 
-    embeddedServer(CIO, port = 8888) {
+    val engine = embeddedServer(CIO, port = 8888) {
         install(StatusPages) {
             exception<NotFoundException> { call, cause ->
                 call.respondText("Not Found", status = HttpStatusCode.NotFound)
@@ -206,7 +215,20 @@ fun main() {
                 }
             }
         }
-    }.start(wait = true)
+
+    }
+    engineRef.value = engine
+
+    signal(SIGINT, staticCFunction(::shutdown))
+
+    engine.start(wait = true)
+}
+
+private fun shutdown(signal: Int) {
+    val engine = engineRef.value ?: return exit(1)
+    engineRef.value = null
+    engine.application.log.info("Shutting down...")
+    engine.stop(0, 0)
 }
 
 @SharedImmutable
